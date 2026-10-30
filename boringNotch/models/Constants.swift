@@ -341,6 +341,25 @@ enum OSDControlSource: String, CaseIterable, Identifiable, Defaults.Serializable
     }
 }
 
+/// How an active notification is drawn in the opened notch.
+enum NotificationStyle: String, CaseIterable, Identifiable, Defaults.Serializable {
+    /// Two short lines — sender, then the message on a single line.
+    case compact
+    /// The original card: app, title, subtitle and up to two lines of body.
+    case full
+
+    var id: String { self.rawValue }
+
+    var localizedString: String {
+        switch self {
+        case .compact:
+            return String(localized: "Compact", comment: "Notification style: Compact")
+        case .full:
+            return String(localized: "Full", comment: "Notification style: Full")
+        }
+    }
+}
+
 enum UpdateChannel: String, CaseIterable, Identifiable, Defaults.Serializable {
     case stable
     case beta
@@ -521,6 +540,10 @@ extension Defaults.Keys {
     /// Seconds a notification stays before it is dismissed; 0 keeps it until
     /// the user dismisses it. 8 was the fixed duration before this setting.
     static let notificationDisplayDuration = Key<Double>("notificationDisplayDuration", default: 8)
+    static let notificationStyle = Key<NotificationStyle>("notificationStyle", default: .compact)
+    /// Compact style only: a message longer than its single line scrolls
+    /// sideways instead of ending in an ellipsis.
+    static let notificationScrollLongMessages = Key<Bool>("notificationScrollLongMessages", default: true)
     static let enableGradient = Key<Bool>("enableGradient", default: false)
     static let systemEventIndicatorShadow = Key<Bool>("systemEventIndicatorShadow", default: false)
     static let systemEventIndicatorUseAccent = Key<Bool>("systemEventIndicatorUseAccent", default: false)

@@ -135,7 +135,10 @@ struct ContentView: View {
     /// controlled by its own internal padding instead, which is the honest
     /// lever anyway.
     private var openNotchHeight: CGFloat? {
-        if notificationManager.activeNotification != nil { return 132 }
+        if notificationManager.activeNotification != nil {
+            // The compact style sizes to its two lines.
+            return Defaults[.notificationStyle] == .compact ? nil : 132
+        }
         return Defaults[.compactMode] ? nil : vm.notchSize.height
     }
 
@@ -527,20 +530,22 @@ struct ContentView: View {
                     // An open notch with a live notification is showing the
                     // reply UI — the usual tabs can wait until it's dismissed.
                     if let notification = notificationManager.activeNotification {
-                        NotificationExpandedView(notification: notification)
-                            .id(notification.id)
+                        if Defaults[.notificationStyle] == .compact {
+                            NotificationCompactView(notification: notification)
+                                .id(notification.id)
+                        } else {
+                            NotificationExpandedView(notification: notification)
+                                .id(notification.id)
+                        }
                     } else if Defaults[.compactMode] {
                         // Player only — no tab switching, so currentView is
                         // ignored here rather than offering a shelf the
                         // compact layout has no room (or tab bar) for.
-                        // 336 = Atoll's 420 base less 20%, which also lands
-                        // within a few points of their Dynamic Island width
-                        // (340) — the tighter of their two compact sizes.
                         CompactHomeView(
                             albumArtNamespace: albumArtNamespace,
                             horizontalMediaGestureFeedback: horizontalMediaGestureFeedback
                         )
-                        .frame(width: 336)
+                        .frame(width: compactOpenContentWidth)
                         .onHover { hovering in
                             isHoveringMusicArea = hovering
                         }

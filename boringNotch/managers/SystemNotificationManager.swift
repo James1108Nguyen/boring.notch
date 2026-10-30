@@ -169,6 +169,25 @@ final class SystemNotificationManager: ObservableObject {
             receivedAt: Date()
         )
         guard isAllowed(notification) else { return }
+        enqueue(notification)
+    }
+
+    /// Shows a made-up notification from Boring Notch itself, skipping the
+    /// helper and the app filter — for checking how notifications look
+    /// without needing another app to post one.
+    func sendTestNotification(title: String?, subtitle: String? = nil, body: String?) {
+        enqueue(SystemNotification(
+            id: "test-\(UUID().uuidString)",
+            appName: "Boring Notch",
+            bundleID: Bundle.main.bundleIdentifier,
+            title: title,
+            subtitle: subtitle,
+            body: body,
+            receivedAt: Date()
+        ))
+    }
+
+    private func enqueue(_ notification: SystemNotification) {
         guard activeNotification == nil else {
             guard isUserPresent else {
                 show(notification)

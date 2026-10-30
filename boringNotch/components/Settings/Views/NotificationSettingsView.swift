@@ -18,6 +18,7 @@ struct NotificationSettingsView: View {
     @Default(.notificationsFromAllApps) private var notificationsFromAllApps
     @Default(.notificationAllowedApps) private var allowedApps
     @Default(.notificationDisplayDuration) private var displayDuration
+    @Default(.notificationStyle) private var notificationStyle
     @State private var isAccessibilityAuthorized = true
 
     /// Seconds; 0 keeps the notification until it is dismissed.
@@ -27,6 +28,10 @@ struct NotificationSettingsView: View {
         allowedApps
             .map { NotificationApp(bundleID: $0, name: displayName(for: $0)) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private func sendTest(title: String?, subtitle: String? = nil, body: String) {
+        SystemNotificationManager.shared.sendTestNotification(title: title, subtitle: subtitle, body: body)
     }
 
     var body: some View {
@@ -71,6 +76,20 @@ struct NotificationSettingsView: View {
                     Text("Expand notch on new notification")
                 }
 
+                Picker(selection: $notificationStyle) {
+                    ForEach(NotificationStyle.allCases) { style in
+                        Text(style.localizedString).tag(style)
+                    }
+                } label: {
+                    Text("Style")
+                }
+                .pickerStyle(.segmented)
+
+                Defaults.Toggle(key: .notificationScrollLongMessages) {
+                    Text("Scroll long messages")
+                }
+                .disabled(notificationStyle != .compact)
+
                 Picker(selection: $displayDuration) {
                     ForEach(Self.displayDurations, id: \.self) { seconds in
                         if seconds == 0 {
@@ -86,6 +105,41 @@ struct NotificationSettingsView: View {
                 Text("Display")
             } footer: {
                 Text("Hovering over a notification pauses the countdown.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .disabled(!notificationLiveActivity)
+
+            Section {
+                Menu("Send test notification") {
+                    Button("Short message") {
+                        sendTest(title: "Minh Anh", body: "Ok bro 👍")
+                    }
+                    Button("Long message") {
+                        sendTest(title: "Minh Anh", body: "Tối nay đi ăn lẩu không bro? 7h ở chỗ cũ nha, nhớ mang theo cái sạc giùm mình, mình quên ở nhà rồi")
+                    }
+                    Button("With subtitle") {
+                        sendTest(title: "Minh Anh", subtitle: "Nhóm Lẩu Thứ 6", body: "Ai đi thì thả tim nha, mình đặt bàn cho đủ người")
+                    }
+                    Button("No title") {
+                        sendTest(title: nil, body: "A notification without a title shows the app name instead")
+                    }
+                    Divider()
+                    Button("Three in a row") {
+                        Task { @MainActor in
+                            sendTest(title: "Minh Anh", body: "Tin 1: alo")
+                            try? await Task.sleep(for: .seconds(1))
+                            sendTest(title: "Hoàng", body: "Tin 2: tới chưa bro, mọi người tới đủ rồi nè")
+                            try? await Task.sleep(for: .seconds(1))
+                            sendTest(title: "Lan", body: "Tin 3: mình tới trễ 15 phút nhé")
+                        }
+                    }
+                }
+                .fixedSize()
+            } header: {
+                Text("Test")
+            } footer: {
+                Text("Shows a sample notification in the notch without going through Notification Center.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
