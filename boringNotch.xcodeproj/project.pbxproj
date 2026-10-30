@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A0D104A10000000000000001 /* AudioProcessObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D104A20000000000000002 /* AudioProcessObserver.swift */; };
 		07FE456E7AEA085D9FCA6D97 /* MeetingLinkDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B2A5E5F4D28F1DD9CD0B09 /* MeetingLinkDetector.swift */; };
 		110029272E84FD4C00035A57 /* TemporaryFileStorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */; };
 		1100292A2E8691B400035A57 /* FileShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110029292E8691B400035A57 /* FileShareView.swift */; };
@@ -184,6 +185,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A0D104A20000000000000002 /* AudioProcessObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioProcessObserver.swift; sourceTree = "<group>"; };
 		0268933F488E47DFB58E48CF /* VisualEffectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectView.swift; sourceTree = "<group>"; };
 		033B8885979E4EA1A78E8ADC /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
 		110029262E84FD4C00035A57 /* TemporaryFileStorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TemporaryFileStorageService.swift; sourceTree = "<group>"; };
@@ -529,6 +531,7 @@
 				5955950C2E900ED800C66711 /* ApplicationRelauncher.swift */,
 				AA03OTP22E7A0001 /* OTPDetector.swift */,
 				14288E0B2C6F8EC000B9F80C /* AppIcons.swift */,
+				A0D104A20000000000000002 /* AudioProcessObserver.swift */,
 				AFAD1670A870402D88BFFE47 /* AudioOutputRouteResolver.swift */,
 			);
 			path = helpers;
@@ -1079,6 +1082,7 @@
 				C1A6A2B02D00000100000001 /* CameraSessionEngine.swift in Sources */,
 				C1A6A2B12D00000100000001 /* CameraModel.swift in Sources */,
 				14288E0C2C6F8EC000B9F80C /* AppIcons.swift in Sources */,
+				A0D104A10000000000000001 /* AudioProcessObserver.swift in Sources */,
 				B19016242CC15B5000E3F12E /* Constants.swift in Sources */,
 				11CFC6632E09918400748C80 /* MusicControllerSelectionView.swift in Sources */,
 				B1F0A0022E60000100000001 /* BrightnessManager.swift in Sources */,
