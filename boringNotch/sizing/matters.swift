@@ -21,6 +21,12 @@ let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: 
 /// than a shrunken panel.
 let compactCornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 35, bottom: 35), closed: cornerRadiusInsets.closed)
 
+/// Content width of the compact opened notch — the compact player and the
+/// compact notification share it so both open to the same size.
+/// 336 = Atoll's 420 base less 20%, which also lands within a few points of
+/// their Dynamic Island width (340) — the tighter of their two compact sizes.
+let compactOpenContentWidth: CGFloat = 336
+
 // Horizontal gap between closed-state live-activity content (album art / waveform)
 // and the physical notch edge. Without this margin the hardware bezel clips the
 // adjacent content since the spacer rect used to be narrower than the physical notch.
