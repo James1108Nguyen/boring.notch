@@ -23,6 +23,7 @@ struct NotchSettingsView: View {
     @Default(.animationSpeedMultiplier) var animationSpeedMultiplier
     @Default(.compactMode) var compactMode
     @Default(.compactOpenWidth) var compactOpenWidth
+    @Default(.boringShelf) var boringShelf
 
     var body: some View {
         Form {
@@ -190,6 +191,10 @@ struct NotchSettingsView: View {
                         .disabled(compactOpenWidth == CompactWidth.default)
                     }
                 }
+                Defaults.Toggle(key: .compactAllowShelf) {
+                    Text("Show Shelf in compact mode")
+                }
+                .disabled(!boringShelf)
             }
         } header: {
             Text("Behavior")
