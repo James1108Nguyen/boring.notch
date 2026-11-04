@@ -529,14 +529,11 @@ struct ContentView: View {
                         // Player only — no tab switching, so currentView is
                         // ignored here rather than offering a shelf the
                         // compact layout has no room (or tab bar) for.
-                        // 336 = Atoll's 420 base less 20%, which also lands
-                        // within a few points of their Dynamic Island width
-                        // (340) — the tighter of their two compact sizes.
                         CompactHomeView(
                             albumArtNamespace: albumArtNamespace,
                             horizontalMediaGestureFeedback: horizontalMediaGestureFeedback
                         )
-                        .frame(width: 336)
+                        .frame(width: compactOpenContentWidth)
                         .onHover { hovering in
                             isHoveringMusicArea = hovering
                         }

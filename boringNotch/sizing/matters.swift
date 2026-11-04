@@ -21,6 +21,34 @@ let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: 
 /// than a shrunken panel.
 let compactCornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 35, bottom: 35), closed: cornerRadiusInsets.closed)
 
+/// Bounds for the compact opened notch's width. The default is Atoll's 420
+/// base less 20%, which also lands within a few points of their Dynamic
+/// Island width (340) — the tighter of their two compact sizes. The lower
+/// bound keeps the transport row (220 pt minimum) plus the panel's side
+/// padding on screen; the upper bound stays well inside `windowSize`, so
+/// widening compact never needs a larger window.
+enum CompactWidth {
+    static let range: ClosedRange<CGFloat> = 280...420
+    static let `default`: CGFloat = 336
+
+    static func clamped(_ width: CGFloat) -> CGFloat {
+        guard !width.isNaN else { return `default` }
+        return min(max(width, range.lowerBound), range.upperBound)
+    }
+}
+
+extension Defaults.Keys {
+    /// Width of the compact opened notch. Declared beside the sizing code it
+    /// feeds rather than in Constants.swift, which upstream edits constantly.
+    static let compactOpenWidth = Key<CGFloat>("compactOpenWidth", default: CompactWidth.default)
+}
+
+/// Content width of the compact opened notch — the compact player and any
+/// other compact panel share it so they all open to the same size.
+var compactOpenContentWidth: CGFloat {
+    CompactWidth.clamped(Defaults[.compactOpenWidth])
+}
+
 // Horizontal gap between closed-state live-activity content (album art / waveform)
 // and the physical notch edge. Without this margin the hardware bezel clips the
 // adjacent content since the spacer rect used to be narrower than the physical notch.
