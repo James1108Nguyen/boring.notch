@@ -49,6 +49,33 @@ enum CompactPage: Equatable {
     }
 }
 
+/// Sizes of the compact Shelf page. The page matches the player's height so
+/// switching never resizes the notch — except when the player has grown
+/// (e.g. an open spectrum analyzer adds ~92 pt): the shelf then keeps its own
+/// size rather than stretching around two files and an AirDrop tile.
+enum CompactShelfLayout {
+    /// The compact player without anything extra is ~134 pt tall; this leaves
+    /// a little room above that so the shelf can always match it exactly.
+    static let maxHeight: CGFloat = 144
+    static let horizontalPadding: CGFloat = 12
+    static let spacing: CGFloat = 8
+    /// FileShareView lays out a 55 pt circle inside 18 pt of padding, so this
+    /// is about as narrow as the standard AirDrop tile can go unmodified. It
+    /// keeps AirDrop to a third of the width — in the full layout it is about
+    /// a quarter — so the drop zone gets most of the room.
+    static let airDropWidth: CGFloat = 104
+
+    static func height(forPlayerHeight playerHeight: CGFloat) -> CGFloat {
+        // Until the player has been measured (0, or not a number) use the cap.
+        guard playerHeight.isFinite, playerHeight > 0 else { return maxHeight }
+        return min(playerHeight, maxHeight)
+    }
+
+    static func dropZoneWidth(forContentWidth width: CGFloat) -> CGFloat {
+        width - 2 * horizontalPadding - spacing - airDropWidth
+    }
+}
+
 struct CompactContainerView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject private var coordinator = BoringViewCoordinator.shared
@@ -60,6 +87,8 @@ struct CompactContainerView: View {
     @Binding var isHoveringMusicArea: Bool
 
     @State private var pointerInside = false
+    /// The player's natural height, kept up to date even while it is hidden.
+    @State private var playerHeight: CGFloat = 0
 
     private var pagesEnabled: Bool { allowShelf && shelfEnabled }
 
@@ -74,10 +103,17 @@ struct CompactContainerView: View {
     var body: some View {
         // The player stays in the layout (just invisible and inert) while the
         // shelf is up, because it is what sizes the container: the shelf is
-        // an overlay and so takes the player's size exactly.
+        // an overlay and so takes that size exactly. Its own height is read
+        // before the frame below, which on the shelf page caps the container
+        // so a tall player (open analyzer) does not stretch the shelf.
         CompactHomeView(
             albumArtNamespace: albumArtNamespace,
             horizontalMediaGestureFeedback: horizontalMediaGestureFeedback
+        )
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { playerHeight = $0 }
+        .frame(
+            height: page == .shelf ? CompactShelfLayout.height(forPlayerHeight: playerHeight) : nil,
+            alignment: .top
         )
         .opacity(page == .shelf ? 0 : 1)
         .allowsHitTesting(page == .player)
@@ -128,14 +164,14 @@ struct CompactContainerView: View {
     }
 }
 
-/// The Shelf laid out for the compact panel: AirDrop on the left, the file
-/// list on the right, both as tall as the player is.
+/// The Shelf laid out for the compact panel, like the full layout shrunk:
+/// a narrow AirDrop tile on the left and the file drop zone filling the rest.
 private struct CompactShelfView: View {
     let dropInteraction: DropInteractionState
     @StateObject private var shelfState = ShelfStateViewModel.shared
     @State private var quickLook = QuickLookService()
 
-    private let spacing: CGFloat = 8
+    private let spacing = CompactShelfLayout.spacing
     // The player pads its content 4 pt at the top and 2 pt at the bottom.
     private let topPadding: CGFloat = 4
     private let bottomPadding: CGFloat = 2
@@ -149,11 +185,11 @@ private struct CompactShelfView: View {
             let side = max(0, geo.size.height - topPadding - bottomPadding)
             HStack(spacing: spacing) {
                 FileShareView(dropInteraction: dropInteraction)
-                    .frame(width: side, height: side)
+                    .frame(width: CompactShelfLayout.airDropWidth, height: side)
                 panel
                     .frame(height: side)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, CompactShelfLayout.horizontalPadding)
             .padding(.top, topPadding)
         }
         .quickLookPresenter(using: quickLook)
