@@ -538,20 +538,16 @@ struct ContentView: View {
                                 .id(notification.id)
                         }
                     } else if Defaults[.compactMode] {
-                        // Player only — no tab switching, so currentView is
-                        // ignored here rather than offering a shelf the
-                        // compact layout has no room (or tab bar) for.
-                        CompactHomeView(
+                        // The player, plus a Shelf page when the user has
+                        // allowed it (see CompactPages.swift). With that
+                        // off this is the player alone and currentView is
+                        // ignored, as before.
+                        CompactContainerView(
                             albumArtNamespace: albumArtNamespace,
-                            horizontalMediaGestureFeedback: horizontalMediaGestureFeedback
+                            horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
+                            isHoveringMusicArea: $isHoveringMusicArea
                         )
                         .frame(width: compactOpenContentWidth)
-                        .onHover { hovering in
-                            isHoveringMusicArea = hovering
-                        }
-                        .onDisappear {
-                            isHoveringMusicArea = false
-                        }
                     } else {
                         switch coordinator.currentView {
                         case .home:
