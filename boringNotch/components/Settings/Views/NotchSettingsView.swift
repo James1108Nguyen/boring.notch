@@ -21,6 +21,8 @@ struct NotchSettingsView: View {
     @Default(.openNotchOnHover) var openNotchOnHover
     @Default(.enableOpeningAnimation) var enableOpeningAnimation
     @Default(.animationSpeedMultiplier) var animationSpeedMultiplier
+    @Default(.compactMode) var compactMode
+    @Default(.compactOpenWidth) var compactOpenWidth
 
     var body: some View {
         Form {
@@ -173,6 +175,21 @@ struct NotchSettingsView: View {
             }
             Defaults.Toggle(key: .compactMode) {
                 Text("Compact mode")
+            }
+            if compactMode {
+                Slider(value: $compactOpenWidth, in: CompactWidth.range, step: 4) {
+                    HStack {
+                        Text("Compact width")
+                        Spacer()
+                        Text("\(Int(CompactWidth.clamped(compactOpenWidth))) pt")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        Button("Reset") {
+                            compactOpenWidth = CompactWidth.default
+                        }
+                        .disabled(compactOpenWidth == CompactWidth.default)
+                    }
+                }
             }
         } header: {
             Text("Behavior")
