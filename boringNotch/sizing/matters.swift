@@ -11,7 +11,16 @@ import SwiftUI
 
 let shadowPadding: CGFloat = 20
 let openNotchSize: CGSize = .init(width: 640, height: 190)
-let windowSize: CGSize = .init(width: openNotchSize.width, height: openNotchSize.height + shadowPadding)
+/// Height the compact player grows by when its spectrum analyzer is open.
+let compactAnalyzerHeight: CGFloat = 84
+let compactAnalyzerSpacing: CGFloat = 8
+/// The window is sized for the tallest content it can show: the full
+/// layout, or the compact player with its analyzer open. The extra area is
+/// transparent, so it passes clicks through like the rest of the window.
+let windowSize: CGSize = .init(
+    width: openNotchSize.width,
+    height: openNotchSize.height + compactAnalyzerHeight + compactAnalyzerSpacing + shadowPadding
+)
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
 /// Compact mode uses a much rounder opened shape than the standard layout

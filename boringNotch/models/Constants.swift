@@ -505,6 +505,9 @@ extension Defaults.Keys {
     /// bar, calendar or mirror. Off by default so existing users keep the
     /// layout they already have.
     static let compactMode = Key<Bool>("compactMode", default: false)
+    /// Compact player: show the spectrum analyzer under the transport row.
+    /// Toggled by clicking the small visualizer; remembered across launches.
+    static let showSpectrumAnalyzer = Key<Bool>("showSpectrumAnalyzer", default: false)
 
     // MARK: Notifications
     /// Off by default: mirroring banners needs Accessibility access.

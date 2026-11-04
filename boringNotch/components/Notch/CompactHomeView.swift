@@ -40,6 +40,7 @@ struct CompactHomeView: View {
     @Default(.playerColorTinting) private var playerColorTinting
     @Default(.showRemainingTime) private var showRemainingTime
     @Default(.showMediaSourceAppIcon) private var showMediaSourceAppIcon
+    @Default(.showSpectrumAnalyzer) private var showsAnalyzer
 
     private let albumArtWidth: CGFloat = 45
     private let headerSpacing: CGFloat = 10
@@ -62,6 +63,19 @@ struct CompactHomeView: View {
 
             transport
                 .padding(.top, 2)
+
+            if showsAnalyzer {
+                SpectrumAnalyzerView()
+                    .frame(height: compactAnalyzerHeight)
+                    .padding(.top, compactAnalyzerSpacing)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(.white.opacity(0.08))
+                            .frame(height: 0.5)
+                            .padding(.top, compactAnalyzerSpacing / 2)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
         .padding(.horizontal, 12)
         // Atoll's 15/3 formula assumes the player is the whole panel; here
@@ -106,16 +120,7 @@ struct CompactHomeView: View {
                 }
                 .frame(width: textWidth, alignment: .leading)
 
-                ZStack {
-                    MusicVisualizer(
-                        isPlaying: musicManager.isPlaying,
-                        tintColor: coloredSpectrogram
-                            ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.6)
-                            : .gray
-                    )
-                    .frame(width: vizBarWidth, height: 16)
-                }
-                .frame(width: vizBlockWidth)
+                analyzerButton
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -138,6 +143,26 @@ struct CompactHomeView: View {
                 .offset(y: -14)
             }
         }
+    }
+
+    /// Clicking the small visualizer shows or hides the analyzer below.
+    private var analyzerButton: some View {
+        Button {
+            withAnimation(.smooth(duration: 0.3)) { showsAnalyzer.toggle() }
+        } label: {
+            MusicVisualizer(
+                isPlaying: musicManager.isPlaying,
+                tintColor: coloredSpectrogram
+                    ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.6)
+                    : .gray
+            )
+            .frame(width: vizBarWidth, height: 16)
+            .frame(width: vizBlockWidth, height: albumArtWidth)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(showsAnalyzer ? "Hide spectrum analyzer" : "Show spectrum analyzer")
+        .accessibilityLabel(showsAnalyzer ? "Hide spectrum analyzer" : "Show spectrum analyzer")
     }
 
     // MARK: - Progress

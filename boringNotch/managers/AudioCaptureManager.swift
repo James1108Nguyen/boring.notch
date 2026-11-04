@@ -4,7 +4,9 @@
 //
 //  Captures audio from the currently-playing music app via Core Audio
 //  Process Tap (macOS 14.2+), runs an FFT via Accelerate, and publishes
-//  6 log-spaced magnitude bands for the visualizer.
+//  6 log-spaced magnitude bands for the visualizer. While the spectrum
+//  analyzer is on screen it also runs a larger FFT for 96 bands across
+//  20 Hz – 20 kHz.
 //
 
 import Accelerate
@@ -26,7 +28,13 @@ final class AudioCaptureManager: ObservableObject {
     static let barCount = 6
     private static let fftSize = 1024
     private static let log2n: vDSP_Length = 10
-    private static let ringCapacity = 4096
+    /// Room for the spectrum analyzer's window; the 6-bar FFT reads only
+    /// the newest fftSize samples of it.
+    private static let ringCapacity = spectrumFFTSize
+    /// 8192 at 48 kHz is ~5.9 Hz per bin, enough to separate sub-bass from
+    /// kick on a 20 Hz – 20 kHz log axis.
+    private static let spectrumFFTSize = 8192
+    private static let spectrumLog2n: vDSP_Length = 13
     private static let fftIntervalMilliseconds = 33
     private static let fftLeewayMilliseconds = 0
     private static let floorDB: Float = -58
@@ -74,6 +82,20 @@ final class AudioCaptureManager: ObservableObject {
     private var bandRanges: [Range<Int>] = []
     private var pinkCompensationDB: [Float] = []
 
+    // Spectrum analyzer (only computed while someone is showing it)
+    private let spectrumFFT: vDSP.FFT<DSPSplitComplex>?
+    private let spectrumWindow: [Float]
+    private let spectrumWindowScalar: Float
+    private var spectrumSamples: [Float]
+    private var spectrumWindowed: [Float]
+    private var spectrumReal: [Float]
+    private var spectrumImag: [Float]
+    private var spectrumPow: [Float]
+    private var spectrumSources: [SpectrumBandSource] = []
+    private var spectrumPinkDB: [Float] = []
+    private var spectrumViewers = 0
+    private var latestSpectrum: [Float]?
+
     private let fftQueue = DispatchQueue(label: "com.boringnotch.audiocapture.fft", qos: .userInitiated)
     private let ioQueue = DispatchQueue(label: "com.boringnotch.audiocapture.io", qos: .userInteractive)
     private let lifecycleQueue = DispatchQueue(label: "com.boringnotch.audiocapture.lifecycle", qos: .userInitiated)
@@ -105,6 +127,21 @@ final class AudioCaptureManager: ObservableObject {
         // Seed with a sentinel so the first real frame always publishes.
         lastPublishedBuf = [Float](repeating: -1, count: Self.barCount)
 
+        spectrumFFT = vDSP.FFT(log2n: Self.spectrumLog2n, radix: .radix2, ofType: DSPSplitComplex.self)
+        let bigWindow = vDSP.window(
+            ofType: Float.self,
+            usingSequence: .hanningDenormalized,
+            count: Self.spectrumFFTSize,
+            isHalfWindow: false
+        )
+        spectrumWindow = bigWindow
+        spectrumWindowScalar = 2.0 / (Float(Self.spectrumFFTSize) * vDSP.sum(vDSP.multiply(bigWindow, bigWindow)))
+        spectrumSamples = [Float](repeating: 0, count: Self.spectrumFFTSize)
+        spectrumWindowed = [Float](repeating: 0, count: Self.spectrumFFTSize)
+        spectrumReal = [Float](repeating: 0, count: Self.spectrumFFTSize / 2)
+        spectrumImag = [Float](repeating: 0, count: Self.spectrumFFTSize / 2)
+        spectrumPow = [Float](repeating: 0, count: Self.spectrumFFTSize / 2)
+
         fftQueue.setSpecific(key: Self.fftQueueKey, value: ())
         lifecycleQueue.setSpecific(key: Self.lifecycleQueueKey, value: ())
         computeBandRanges(sampleRate: sampleRate)
@@ -131,6 +168,27 @@ final class AudioCaptureManager: ObservableObject {
         levelsConsumerLock.lock()
         defer { levelsConsumerLock.unlock() }
         levelsConsumers.remove(consumer)
+    }
+
+    /// Starts computing the analyzer spectrum; balance with endSpectrum().
+    func beginSpectrum() {
+        levelsConsumerLock.lock()
+        spectrumViewers += 1
+        levelsConsumerLock.unlock()
+    }
+
+    func endSpectrum() {
+        levelsConsumerLock.lock()
+        spectrumViewers = max(0, spectrumViewers - 1)
+        if spectrumViewers == 0 { latestSpectrum = nil }
+        levelsConsumerLock.unlock()
+    }
+
+    /// One pink-compensated dB value per SpectrumScale band, newest frame.
+    func latestSpectrumSnapshot() -> [Float]? {
+        levelsConsumerLock.lock()
+        defer { levelsConsumerLock.unlock() }
+        return latestSpectrum
     }
 
     func latestLevelsSnapshot() -> [Float]? {
@@ -609,6 +667,9 @@ final class AudioCaptureManager: ObservableObject {
             barsBuf[i] = 0
             lastPublishedBuf[i] = -1
         }
+        levelsConsumerLock.lock()
+        latestSpectrum = nil
+        levelsConsumerLock.unlock()
     }
 
     private func teardownCapture() {
@@ -730,7 +791,8 @@ final class AudioCaptureManager: ObservableObject {
     private func processFFT() {
         guard let fft else { return }
         let n = Self.fftSize
-        copyLatestSamples(count: n)
+        copyLatestSamples(count: n, into: &samplesBuf)
+        processSpectrumIfNeeded()
 
         vDSP.multiply(samplesBuf, hannWindow, result: &windowedBuf)
 
@@ -790,14 +852,62 @@ final class AudioCaptureManager: ObservableObject {
         publishLevels(barsBuf.map { $0 })
     }
 
-    private func copyLatestSamples(count: Int) {
+    private func processSpectrumIfNeeded() {
+        levelsConsumerLock.lock()
+        let wanted = spectrumViewers > 0
+        levelsConsumerLock.unlock()
+        guard wanted, let spectrumFFT, !spectrumSources.isEmpty else { return }
+
+        let n = Self.spectrumFFTSize
+        let halfN = n / 2
+        copyLatestSamples(count: n, into: &spectrumSamples)
+        vDSP.multiply(spectrumSamples, spectrumWindow, result: &spectrumWindowed)
+        spectrumReal.withUnsafeMutableBufferPointer { rPtr in
+            spectrumImag.withUnsafeMutableBufferPointer { iPtr in
+                var split = DSPSplitComplex(realp: rPtr.baseAddress!, imagp: iPtr.baseAddress!)
+                spectrumWindowed.withUnsafeBufferPointer { wPtr in
+                    wPtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { cPtr in
+                        vDSP_ctoz(cPtr, 2, &split, 1, vDSP_Length(halfN))
+                    }
+                }
+                spectrumFFT.forward(input: split, output: &split)
+                rPtr[0] = 0
+                iPtr[0] = 0
+                vDSP.squareMagnitudes(split, result: &spectrumPow)
+            }
+        }
+        vDSP.multiply(spectrumWindowScalar, spectrumPow, result: &spectrumPow)
+
+        var levels = [Float](repeating: 0, count: spectrumSources.count)
+        spectrumPow.withUnsafeBufferPointer { pPtr in
+            guard let base = pPtr.baseAddress else { return }
+            for (i, source) in spectrumSources.enumerated() {
+                let power: Float
+                switch source {
+                case .bins(let range):
+                    var sum: Float = 0
+                    vDSP_sve(base.advanced(by: range.lowerBound), 1, &sum, vDSP_Length(range.count))
+                    power = sum / Float(range.count)
+                case .interpolated(let lower, let fraction):
+                    power = base[lower] * (1 - fraction) + base[lower + 1] * fraction
+                }
+                levels[i] = 10 * log10f(max(power, 1e-14)) + spectrumPinkDB[i]
+            }
+        }
+
+        levelsConsumerLock.lock()
+        if spectrumViewers > 0 { latestSpectrum = levels }
+        levelsConsumerLock.unlock()
+    }
+
+    private func copyLatestSamples(count: Int, into buffer: inout [Float]) {
         ringLock.lock()
         defer { ringLock.unlock() }
 
         let cap = Self.ringCapacity
         let end = ringWrite
         let start = (end - count + cap) % cap
-        samplesBuf.withUnsafeMutableBufferPointer { dst in
+        buffer.withUnsafeMutableBufferPointer { dst in
             guard let base = dst.baseAddress else { return }
             if start + count <= cap {
                 memcpy(base, ringBuffer.advanced(by: start), count * MemoryLayout<Float>.size)
@@ -859,6 +969,11 @@ final class AudioCaptureManager: ObservableObject {
         }
         bandRanges = ranges
         pinkCompensationDB = pinks
+
+        spectrumSources = SpectrumBandLayout.make(sampleRate: sampleRate, fftSize: Self.spectrumFFTSize)
+        spectrumPinkDB = SpectrumScale.bandEdges().map { edges in
+            Float(Self.pinkCompensationSlopePerOctave * log2(sqrt(edges.lower * edges.upper) / Self.referenceHz))
+        }
     }
 
     private func validateTapFormat(_ format: AudioStreamBasicDescription) -> Bool {
