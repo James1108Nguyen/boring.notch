@@ -21,6 +21,8 @@ enum NotchState {
 enum NotchViews {
     case home
     case shelf
+    /// Only reachable when Settings › Notch puts the analyzer on its own tab.
+    case analyzer
 }
 
 enum DownloadIndicatorStyle: String, Defaults.Serializable {

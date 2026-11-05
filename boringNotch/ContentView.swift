@@ -37,6 +37,11 @@ struct ContentView: View {
 
     @Namespace var albumArtNamespace
 
+    // Read here (not only in NormalHomeContainer) so the open-notch frame
+    // below follows the analyzer being shown or hidden.
+    @Default(.normalAnalyzerStyle) private var normalAnalyzerStyle
+    @Default(.showSpectrumAnalyzer) private var showSpectrumAnalyzer
+
     @Default(.showNotHumanFace) var showNotHumanFace
 
     // Use standardized animations from StandardAnimations enum
@@ -133,7 +138,13 @@ struct ContentView: View {
     /// lever anyway.
     private var openNotchHeight: CGFloat? {
         if notificationManager.activeNotification != nil { return 132 }
-        return Defaults[.compactMode] ? nil : vm.notchSize.height
+        if Defaults[.compactMode] { return nil }
+        // This frame also bounds hover hit-testing, so it has to cover the
+        // analyzer strip when it is showing or the pointer leaves the notch.
+        let analyzerShowing = NormalAnalyzer.inlineVisible(
+            style: normalAnalyzerStyle, shown: showSpectrumAnalyzer, page: coordinator.currentView
+        )
+        return vm.notchSize.height + NormalAnalyzer.extraHeight(inlineVisible: analyzerShowing)
     }
 
     /// Compact mode drops the tab bar along with the tabs it switches
@@ -546,7 +557,7 @@ struct ContentView: View {
                     } else {
                         switch coordinator.currentView {
                         case .home:
-                            NotchHomeView(
+                            NormalHomeContainer(
                                 albumArtNamespace: albumArtNamespace,
                                 horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
                                 isHoveringMusicArea: $isHoveringMusicArea
@@ -555,6 +566,12 @@ struct ContentView: View {
                             ShelfView(
                                 dropInteraction: vm.dropInteraction,
                                 animation: vm.animation
+                            )
+                        case .analyzer:
+                            NormalAnalyzerPage(
+                                albumArtNamespace: albumArtNamespace,
+                                horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
+                                isHoveringMusicArea: $isHoveringMusicArea
                             )
                         }
                     }
