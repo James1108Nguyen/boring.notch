@@ -83,6 +83,52 @@ enum SpectrumBandLayout {
     }
 }
 
+// MARK: - Options
+
+enum AnalyzerColor: String, CaseIterable, Identifiable, Defaults.Serializable {
+    case blue
+    case albumArt
+    case accent
+
+    var id: String { rawValue }
+}
+
+/// What Settings › Analyzer can change. Values are clamped when read so a
+/// stale or hand-edited preference can't produce an unusable analyzer, and
+/// the defaults are what the analyzer always looked like.
+enum AnalyzerOptions {
+    static let heightRange: ClosedRange<CGFloat> = 60...140
+    static let defaultHeight: CGFloat = 84
+    static let dynamicRangeRange: ClosedRange<Float> = 40...90
+    static let defaultDynamicRange: Float = 60
+    static let peakHoldRange: ClosedRange<Double> = 0.1...2.0
+    static let defaultPeakHold: Double = 0.4
+
+    static func clampedHeight(_ value: CGFloat) -> CGFloat {
+        value.isNaN ? defaultHeight : min(max(value, heightRange.lowerBound), heightRange.upperBound)
+    }
+
+    static func clampedDynamicRange(_ value: Float) -> Float {
+        value.isNaN ? defaultDynamicRange : min(max(value, dynamicRangeRange.lowerBound), dynamicRangeRange.upperBound)
+    }
+
+    static func clampedPeakHold(_ value: Double) -> Double {
+        value.isNaN ? defaultPeakHold : min(max(value, peakHoldRange.lowerBound), peakHoldRange.upperBound)
+    }
+}
+
+extension Defaults.Keys {
+    // Declared beside the analyzer rather than in Constants.swift, which
+    // upstream edits constantly.
+    static let analyzerColor = Key<AnalyzerColor>("analyzerColor", default: .blue)
+    static let analyzerHeight = Key<CGFloat>("analyzerHeight", default: AnalyzerOptions.defaultHeight)
+    static let analyzerShowFrequencyLabels = Key<Bool>("analyzerShowFrequencyLabels", default: true)
+    static let analyzerShowPeakLabels = Key<Bool>("analyzerShowPeakLabels", default: true)
+    static let analyzerShowCursor = Key<Bool>("analyzerShowCursor", default: true)
+    static let analyzerDynamicRange = Key<Double>("analyzerDynamicRange", default: Double(AnalyzerOptions.defaultDynamicRange))
+    static let analyzerPeakHold = Key<Double>("analyzerPeakHold", default: AnalyzerOptions.defaultPeakHold)
+}
+
 // MARK: - Motion
 
 /// Turns raw band levels into what's drawn: auto-gained, smoothed live
@@ -90,8 +136,9 @@ enum SpectrumBandLayout {
 /// frame without triggering view updates.
 final class SpectrumAnalyzerState {
     /// dB below the loudest band that still shows above the floor.
-    static let dynamicRange: Float = 60
-    static let peakHoldSeconds: Double = 0.4
+    var dynamicRange: Float = AnalyzerOptions.defaultDynamicRange
+    /// How long a peak stays put before it starts to fall.
+    var peakHoldSeconds: Double = AnalyzerOptions.defaultPeakHold
 
     private(set) var live = [Float](repeating: 0, count: SpectrumScale.bandCount)
     private(set) var peak = [Float](repeating: 0, count: SpectrumScale.bandCount)
@@ -114,7 +161,7 @@ final class SpectrumAnalyzerState {
             let ref = max(loudest, (reference ?? loudest) - 1.8 * dt)
             reference = ref
             for i in raw.indices {
-                raw[i] = min(1, max(0, (levelsDB[i] - (ref - Self.dynamicRange)) / Self.dynamicRange))
+                raw[i] = min(1, max(0, (levelsDB[i] - (ref - dynamicRange)) / dynamicRange))
             }
         } else {
             for i in raw.indices { raw[i] = 0 }
@@ -135,7 +182,7 @@ final class SpectrumAnalyzerState {
                 peak[i] = live[i]
                 peakTime[i] = now
             } else {
-                let age = now - peakTime[i] - Self.peakHoldSeconds
+                let age = now - peakTime[i] - peakHoldSeconds
                 if age > 0 {
                     let speed = 0.12 + 0.3 * Float(min(1, age))
                     peak[i] = max(live[i], peak[i] - dt * speed)
@@ -189,17 +236,40 @@ final class SpectrumAnalyzerState {
 struct SpectrumAnalyzerView: View {
     @ObservedObject private var capture = AudioCaptureManager.shared
     @Default(.realtimeAudioWaveform) private var captureEnabled
+    @Default(.analyzerColor) private var colorMode
+    @Default(.analyzerShowFrequencyLabels) private var showFrequencyLabels
+    @Default(.analyzerShowPeakLabels) private var showPeakLabels
+    @Default(.analyzerShowCursor) private var showCursor
+    @Default(.analyzerDynamicRange) private var dynamicRange
+    @Default(.analyzerPeakHold) private var peakHold
     @State private var state = SpectrumAnalyzerState()
     @State private var cursorX: CGFloat?
 
     private static let octaveTicks: [Double] = [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
     private static let labelFont = Font.system(size: 8.5, design: .monospaced)
     private static let markerColor = Color(red: 1, green: 0.82, blue: 0.35)
-    private static let fillColor = Color(red: 0.35, green: 0.7, blue: 1)
+    private static let blueFill = Color(red: 0.35, green: 0.7, blue: 1)
+    private static let blueGlow = Color(red: 0.63, green: 0.86, blue: 1)
+
+    /// Read per frame (not observed) so the album-art tint follows the track
+    /// without re-rendering the view for every unrelated music update.
+    private var fillColor: Color {
+        switch colorMode {
+        case .blue: Self.blueFill
+        case .albumArt: Color(nsColor: MusicManager.shared.avgColor).ensureMinimumBrightness(factor: 0.6)
+        case .accent: Color.effectiveAccent
+        }
+    }
+
+    private var glowColor: Color {
+        colorMode == .blue ? Self.blueGlow : fillColor
+    }
 
     var body: some View {
         TimelineView(.animation) { timeline in
             Canvas { context, size in
+                state.dynamicRange = AnalyzerOptions.clampedDynamicRange(Float(dynamicRange))
+                state.peakHoldSeconds = AnalyzerOptions.clampedPeakHold(peakHold)
                 state.advance(
                     levelsDB: capture.isCapturing ? capture.latestSpectrumSnapshot() : nil,
                     now: timeline.date.timeIntervalSinceReferenceDate
@@ -218,7 +288,7 @@ struct SpectrumAnalyzerView: View {
         }
         .onContinuousHover { phase in
             switch phase {
-            case .active(let location): cursorX = location.x
+            case .active(let location): cursorX = showCursor ? location.x : nil
             case .ended: cursorX = nil
             }
         }
@@ -228,8 +298,10 @@ struct SpectrumAnalyzerView: View {
     }
 
     private func draw(in context: inout GraphicsContext, size: CGSize) {
-        let top: CGFloat = 13       // room for peak labels
-        let bottom: CGFloat = 12    // octave labels
+        // Room for the peak labels above and the octave labels below, which
+        // the plot reclaims when they are switched off.
+        let top: CGFloat = showPeakLabels ? 13 : 4
+        let bottom: CGFloat = showFrequencyLabels ? 12 : 2
         let plot = CGRect(x: 0, y: top, width: size.width, height: max(1, size.height - top - bottom))
         let x = { (fraction: Double) in plot.minX + CGFloat(fraction) * plot.width }
         let y = { (level: Float) in plot.maxY - CGFloat(pow(level, 0.8)) * plot.height }
@@ -245,9 +317,11 @@ struct SpectrumAnalyzerView: View {
             let strong = hz == 1000
             context.stroke(Path { $0.move(to: CGPoint(x: gx, y: plot.minY)); $0.addLine(to: CGPoint(x: gx, y: plot.maxY)) },
                            with: .color(.white.opacity(strong ? 0.14 : 0.06)), lineWidth: 0.5)
-            let text = hz >= 1000 ? "\(Int(hz / 1000))k" : (hz == 31.5 ? "31.5" : "\(Int(hz))")
-            context.draw(Text(text).font(Self.labelFont).foregroundColor(.white.opacity(0.45)),
-                         at: CGPoint(x: gx, y: size.height), anchor: .bottom)
+            if showFrequencyLabels {
+                let text = hz >= 1000 ? "\(Int(hz / 1000))k" : (hz == 31.5 ? "31.5" : "\(Int(hz))")
+                context.draw(Text(text).font(Self.labelFont).foregroundColor(.white.opacity(0.45)),
+                             at: CGPoint(x: gx, y: size.height), anchor: .bottom)
+            }
         }
 
         // Traces
@@ -265,35 +339,38 @@ struct SpectrumAnalyzerView: View {
         fill.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
         fill.addLine(to: CGPoint(x: plot.minX, y: plot.maxY))
         fill.closeSubpath()
+        let tint = fillColor
         context.fill(fill, with: .linearGradient(
-            Gradient(colors: [Self.fillColor.opacity(0.6), Self.fillColor.opacity(0.05)]),
+            Gradient(colors: [tint.opacity(0.6), tint.opacity(0.05)]),
             startPoint: CGPoint(x: 0, y: plot.minY), endPoint: CGPoint(x: 0, y: plot.maxY)
         ))
 
         context.drawLayer { layer in
-            layer.addFilter(.shadow(color: Color(red: 0.63, green: 0.86, blue: 1).opacity(0.8), radius: 3))
+            layer.addFilter(.shadow(color: glowColor.opacity(0.8), radius: 3))
             layer.stroke(Self.smoothPath(through: peakPoints), with: .color(.white.opacity(0.95)),
                          style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
 
         // Pinned peaks
-        for marker in SpectrumAnalyzerState.peakMarkers(in: state.peak) {
-            let point = CGPoint(x: x(marker.fraction), y: y(marker.level))
-            context.fill(Path(ellipseIn: CGRect(x: point.x - 2.2, y: point.y - 2.2, width: 4.4, height: 4.4)),
-                         with: .color(Self.markerColor))
-            let label = SpectrumScale.label(forHz: SpectrumScale.hz(atFraction: marker.fraction))
-            drawTag(label, in: &context, size: size, near: CGPoint(x: point.x, y: max(6, point.y - 8)), centered: true)
+        if showPeakLabels {
+            for marker in SpectrumAnalyzerState.peakMarkers(in: state.peak) {
+                let point = CGPoint(x: x(marker.fraction), y: y(marker.level))
+                context.fill(Path(ellipseIn: CGRect(x: point.x - 2.2, y: point.y - 2.2, width: 4.4, height: 4.4)),
+                             with: .color(Self.markerColor))
+                let label = SpectrumScale.label(forHz: SpectrumScale.hz(atFraction: marker.fraction))
+                drawTag(label, in: &context, size: size, near: CGPoint(x: point.x, y: max(6, point.y - 8)), centered: true)
+            }
         }
 
         // Measuring cursor
-        if let cursorX {
+        if showCursor, let cursorX {
             let gx = min(plot.maxX, max(plot.minX, cursorX))
             let f = Double((gx - plot.minX) / plot.width)
             context.stroke(Path { $0.move(to: CGPoint(x: gx, y: plot.minY)); $0.addLine(to: CGPoint(x: gx, y: plot.maxY)) },
                            with: .color(Self.markerColor.opacity(0.8)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
             let hz = SpectrumScale.hz(atFraction: f)
             let level = SpectrumAnalyzerState.sample(state.live, at: f)
-            let db = Int((-(1 - level) * SpectrumAnalyzerState.dynamicRange).rounded())
+            let db = Int((-(1 - level) * state.dynamicRange).rounded())
             let readout = "\(SpectrumScale.label(forHz: hz)) · \(db) dB · \(SpectrumScale.noteName(forHz: hz))"
             drawTag(readout, in: &context, size: size, near: CGPoint(x: gx + 6, y: plot.minY + 8), centered: false)
         }

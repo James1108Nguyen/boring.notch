@@ -174,7 +174,6 @@ struct NotchSettingsView: View {
                     }
                 }
             }
-            NormalAnalyzerSettingRow()
             Defaults.Toggle(key: .compactMode) {
                 Text("Compact mode")
             }
