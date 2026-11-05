@@ -11,15 +11,17 @@ import SwiftUI
 
 let shadowPadding: CGFloat = 20
 let openNotchSize: CGSize = .init(width: 640, height: 190)
-/// Height the compact player grows by when its spectrum analyzer is open.
-let compactAnalyzerHeight: CGFloat = 84
+/// Height the opened notch grows by when its spectrum analyzer is open, in
+/// compact and in the standard layout. Set in Settings › Analyzer.
+var compactAnalyzerHeight: CGFloat { AnalyzerOptions.clampedHeight(Defaults[.analyzerHeight]) }
 let compactAnalyzerSpacing: CGFloat = 8
-/// The window is sized for the tallest content it can show: the full
-/// layout, or the compact player with its analyzer open. The extra area is
-/// transparent, so it passes clicks through like the rest of the window.
+/// The window is created once, so it is sized for the tallest content it can
+/// show: the full layout with the analyzer at its largest setting. The extra
+/// area is transparent, so it passes clicks through like the rest of the
+/// window.
 let windowSize: CGSize = .init(
     width: openNotchSize.width,
-    height: openNotchSize.height + compactAnalyzerHeight + compactAnalyzerSpacing + shadowPadding
+    height: openNotchSize.height + AnalyzerOptions.heightRange.upperBound + compactAnalyzerSpacing + shadowPadding
 )
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
